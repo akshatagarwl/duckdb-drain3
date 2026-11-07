@@ -1,0 +1,93 @@
+# name: test/sql/readme.test
+# description: the README examples, run against a small log table
+# group: [drain3]
+
+require drain3
+
+statement ok
+CREATE TABLE logs AS SELECT * FROM (VALUES
+ (TIMESTAMP '2026-11-01 10:00:00', 'api', 'user alice logged in from 10.0.0.1 after 3 attempts'),
+ (TIMESTAMP '2026-11-01 10:01:00', 'api', 'user bob logged in from 10.0.0.7 after 1 attempts'),
+ (TIMESTAMP '2026-11-01 10:02:00', 'api', 'connection closed by peer 10.1.1.1'),
+ (TIMESTAMP '2026-11-01 10:03:00', 'api', 'connection closed by peer 10.1.1.2'),
+ (TIMESTAMP '2026-11-01 12:30:00', 'api', 'user carol logged in from 10.9.8.7 after 5 attempts'),
+ (TIMESTAMP '2026-11-01 12:31:00', 'api', 'cache shard 3 rebuilt in 120 ms'),
+ (TIMESTAMP '2026-11-01 12:32:00', 'api', 'cache shard 7 rebuilt in 98 ms')) t(ts, service, message);
+
+# 1. Top templates
+query TI
+SELECT c.template, c.size
+FROM (SELECT unnest(drain_clusters(drain_train(message ORDER BY ts))) AS c FROM logs)
+ORDER BY c.size DESC, c.template
+LIMIT 10;
+----
+user <*> logged in from <*> after <*> attempts	3
+cache shard <*> rebuilt in <*> ms	2
+connection closed by peer <*>	2
+
+# 2. What is new since the deploy
+query TI
+WITH before AS (
+  SELECT drain_train(message ORDER BY ts) AS model
+  FROM logs WHERE ts < TIMESTAMP '2026-11-01 12:00'
+)
+SELECT drain_params('cache shard <*> rebuilt in <*> ms', message)[1] AS shard, count(*) AS n
+FROM logs, before
+WHERE ts >= TIMESTAMP '2026-11-01 12:00'
+  AND drain_match(before.model, message) IS NULL
+GROUP BY ALL ORDER BY shard;
+----
+3	1
+7	1
+
+# 3. Filter on parameters
+query TT
+SELECT ts, params[1] AS user
+FROM drain_parse('logs', 'message', order_by := 'ts')
+WHERE template = 'user <*> logged in from <*> after <*> attempts'
+  AND params[3]::INT >= 3;
+----
+2026-11-01 10:00:00	alice
+2026-11-01 12:30:00	carol
+
+# 4. Parquet archive, and rebuilding lines from it
+statement ok
+COPY (SELECT ts, service, cluster_id, params FROM drain_parse('logs', 'message', order_by := 'ts'))
+  TO '__TEST_DIR__/lines.parquet';
+
+statement ok
+COPY (SELECT unnest(drain_clusters(drain_train(message ORDER BY ts)), recursive := true) FROM logs)
+  TO '__TEST_DIR__/templates.parquet';
+
+query I
+SELECT count(*) FROM read_parquet('__TEST_DIR__/lines.parquet') l
+JOIN read_parquet('__TEST_DIR__/templates.parquet') t USING (cluster_id)
+JOIN logs USING (ts)
+WHERE drain_render(t.template, l.params) = logs.message;
+----
+7
+
+# 5. Train once, reuse the model
+statement ok
+CREATE TABLE models AS
+SELECT service, drain_train(message ORDER BY ts) AS model FROM logs GROUP BY service;
+
+query TI
+SELECT drain_match(m.model, l.message).template AS template, count(*) AS n
+FROM (VALUES ('api', 'connection closed by peer 192.168.0.9'), ('api', 'disk full')) l(service, message)
+JOIN models m USING (service)
+GROUP BY ALL ORDER BY template NULLS LAST;
+----
+connection closed by peer <*>	1
+NULL	1
+
+# drain_render
+query T
+SELECT drain_render('user <*> logged in from <IP>', ['bob', '10.0.0.1']);
+----
+user bob logged in from 10.0.0.1
+
+query TTT
+SELECT drain_render('a <*> b <*>', ['1']), drain_render('a <*>', NULL), drain_render(NULL, ['x']);
+----
+a 1 b <*>	NULL	NULL

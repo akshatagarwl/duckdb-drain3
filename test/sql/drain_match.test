@@ -1,0 +1,125 @@
+# name: test/sql/drain_match.test
+# description: drain_match, drain_clusters and model BLOB handling
+# group: [drain3]
+
+require drain3
+
+statement ok
+CREATE TABLE logs AS SELECT * FROM (VALUES
+ (1, 'user alice logged in from 10.0.0.1 after 3 attempts'),
+ (2, 'user bob logged in from 10.0.0.7 after 1 attempts'),
+ (3, 'connection closed by peer 10.1.1.1'),
+ (4, 'connection closed by peer 10.1.1.2')) t(ts, message);
+
+statement ok
+CREATE TABLE models AS SELECT drain_train(message, masks := [{'pattern': '\d+\.\d+\.\d+\.\d+', 'mask': '<IP>'}] ORDER BY ts) AS model FROM logs;
+
+query ITT
+SELECT r.cluster_id, r.template, r.params FROM (SELECT drain_match(model, 'user dave logged in from 1.2.3.4 after 9 attempts') AS r FROM models);
+----
+1	user <*> logged in from <IP> after <*> attempts	[dave, 1.2.3.4, 9]
+
+# No match, NULL model, NULL message.
+query T
+SELECT drain_match(model, 'something else entirely') FROM models;
+----
+NULL
+
+query TT
+SELECT drain_match(NULL, 'x'), drain_match(model, NULL) FROM models;
+----
+NULL	NULL
+
+# Matching does not train: the model is unchanged.
+query T
+SELECT model = (SELECT drain_train(message, masks := [{'pattern': '\d+\.\d+\.\d+\.\d+', 'mask': '<IP>'}] ORDER BY ts) FROM logs) FROM models;
+----
+true
+
+# Search strategies.
+query T
+SELECT drain_match(model, 'connection closed by peer 9.9.9.9', search := 'fallback').cluster_id FROM models;
+----
+2
+
+query T
+SELECT drain_match(model, 'connection closed by peer 9.9.9.9', search := 'ALWAYS').cluster_id FROM models;
+----
+2
+
+statement error
+SELECT drain_match(model, 'x', search := 'sometimes') FROM models;
+----
+search must be 'never', 'fallback' or 'always'
+
+# Bad BLOBs are errors, not crashes.
+statement error
+SELECT drain_match('not a model'::BLOB, 'x');
+----
+not a drain3 model BLOB
+
+statement error
+SELECT drain_match(''::BLOB, 'x');
+----
+not a drain3 model BLOB
+
+statement error
+SELECT drain_match('DRAIN3M\x09'::BLOB, 'x');
+----
+unsupported format version
+
+statement error
+SELECT drain_match('DRAIN3M\x01\xFF\xFF\xFF\xFF\xFF'::BLOB, 'x');
+----
+corrupt model BLOB
+
+statement error
+SELECT drain_clusters('DRAIN3M\x01'::BLOB);
+----
+corrupt model BLOB
+
+# Truncated models are rejected.
+statement error
+SELECT drain_match(model[1:octet_length(model) - 3], 'x') FROM models;
+----
+corrupt model BLOB
+
+# Matching many rows in parallel against one model.
+statement ok
+SET threads = 4;
+
+query II
+SELECT count(*), count(DISTINCT drain_match(model, 'connection closed by peer 10.0.' || (i % 250) || '.' || (i % 7)).cluster_id) FROM range(200000) t(i), models;
+----
+200000	1
+
+# Different models in one column.
+query IT
+SELECT g, drain_match(m, 'connection closed by peer 10.1.1.2').template FROM (
+  SELECT ts % 2 AS g, drain_train(message ORDER BY ts) AS m FROM logs GROUP BY g) ORDER BY g;
+----
+0	connection closed by peer 10.1.1.2
+1	NULL
+
+# drain_clusters.
+query IIT
+SELECT c.cluster_id, c.size, c.template FROM (SELECT unnest(drain_clusters(model)) AS c FROM models);
+----
+1	2	user <*> logged in from <IP> after <*> attempts
+2	2	connection closed by peer <IP>
+
+query T
+SELECT drain_clusters(NULL);
+----
+NULL
+
+# Unicode and huge lines.
+query T
+SELECT drain_match(drain_train(m ORDER BY i), 'naïve 用户 ✅ ok 7').template FROM (VALUES (1, 'naïve 用户 ✅ ok 5'), (2, 'naïve 用户 ✅ ok 6')) t(i, m);
+----
+naïve 用户 ✅ ok <*>
+
+query I
+SELECT len(drain_match(drain_train(m ORDER BY i), repeat('tok ', 200000) || 'end').params) FROM (VALUES (1, repeat('tok ', 200000) || 'end'), (2, repeat('tok ', 200000) || 'fin')) t(i, m);
+----
+1

@@ -31,7 +31,8 @@ pub fn decode(bytes: &[u8]) -> Result<Drain> {
     })?;
     let snap: Snapshot = postcard::from_bytes(body)
         .map_err(|e| Error::invalid_input(format!("drain3: corrupt model BLOB: {e}")))?;
-    Drain::from_snapshot(snap).map_err(|e| Error::invalid_input(format!("drain3: corrupt model BLOB: {e}")))
+    Drain::from_snapshot(snap)
+        .map_err(|e| Error::invalid_input(format!("drain3: corrupt model BLOB: {e}")))
 }
 
 /// Merge `source` into `target` by replaying each source template once, weighted by its size.
@@ -71,6 +72,7 @@ pub fn add_sizes(target: &mut Drain, extra: &[(u64, u64)]) -> Result<()> {
             c.size += n;
         }
     }
-    *target = Drain::from_snapshot(snap).map_err(|e| Error::internal(format!("drain3: merge: {e}")))?;
+    *target =
+        Drain::from_snapshot(snap).map_err(|e| Error::internal(format!("drain3: merge: {e}")))?;
     Ok(())
 }

@@ -58,7 +58,9 @@ impl AggregateCallbacks for Train {
         let input = data.get_vector_at::<String>(0)?;
         for (row, value) in input.reader()?.iter().enumerate() {
             if let Some(line) = value {
-                states[row].get_or_insert_with(|| new_drain(cfg)).train(line);
+                states[row]
+                    .get_or_insert_with(|| new_drain(cfg))
+                    .train(line);
             }
         }
         Ok(())
@@ -149,7 +151,11 @@ impl AggregateCallbacks for TrainIdsAgg {
             let state = &mut states[row];
             match value {
                 Some(line) => {
-                    let id = state.drain.get_or_insert_with(|| new_drain(cfg)).train(line).cluster_id;
+                    let id = state
+                        .drain
+                        .get_or_insert_with(|| new_drain(cfg))
+                        .train(line)
+                        .cluster_id;
                     state.ids.push(id.get());
                 }
                 None => state.ids.push(0),
@@ -198,9 +204,9 @@ impl AggregateCallbacks for TrainIdsAgg {
             n_clusters += s.drain.as_ref().map_or(0, |d| max_id(d) as usize);
         }
         {
-            let mut children = result
-                .children_mut()
-                .ok_or_else(|| Error::internal("drain_train_ids: STRUCT result without children"))?;
+            let mut children = result.children_mut().ok_or_else(|| {
+                Error::internal("drain_train_ids: STRUCT result without children")
+            })?;
             let mut ids = children.get_vector_at_mut::<List<u64>>(1)?;
             let base = ids.child_offset();
             // SAFETY: every reserved element is written below (one per id).
@@ -250,7 +256,10 @@ impl AggregateCallbacks for TrainIdsAgg {
                     cluster_ids: s
                         .ids
                         .iter()
-                        .map(|&id| (id != 0 && d.cluster(drain::ClusterId::new(id).unwrap()).is_some()).then_some(id))
+                        .map(|&id| {
+                            (id != 0 && d.cluster(drain::ClusterId::new(id).unwrap()).is_some())
+                                .then_some(id)
+                        })
                         .collect(),
                     templates: List(templates),
                     sizes: List(sizes),
@@ -265,9 +274,15 @@ fn max_id(d: &Drain) -> u64 {
     d.clusters().map(|c| c.id().get()).max().unwrap_or(0)
 }
 
-fn signature(extension: &Extension, ret: LogicalType, docs: FunctionDocumentationBuilder) -> Result<SignatureBuilder> {
+fn signature(
+    extension: &Extension,
+    ret: LogicalType,
+    docs: FunctionDocumentationBuilder,
+) -> Result<SignatureBuilder> {
     let sig = SignatureBuilder::new().param(FunctionParameter::new::<String>("message"));
-    Ok(config::add_params(sig, extension)?.return_type(ret).documentation(docs.add_category(CATEGORY)))
+    Ok(config::add_params(sig, extension)?
+        .return_type(ret)
+        .documentation(docs.add_category(CATEGORY)))
 }
 
 pub fn register(extension: &Extension) -> Result<()> {

@@ -44,7 +44,7 @@ __drain_src AS (
 ),
 __drain_model AS (
     SELECT drain_train_ids(
-               COLUMNS(lambda c: c = message_column)::VARCHAR ORDER BY __drain_row,
+               COLUMNS(lambda c: c = message_column)::VARCHAR,
                sim_threshold := sim_threshold,
                depth := depth,
                max_children := max_children,
@@ -53,13 +53,14 @@ __drain_model AS (
                masks := masks,
                param_str := param_str,
                parametrize_numeric_tokens := parametrize_numeric_tokens
+               ORDER BY __drain_row
            ) AS __drain_r
     FROM __drain_src
 ),
 __drain_out AS (
     SELECT __drain_src.* EXCLUDE (__drain_scan_no),
            __drain_r.cluster_ids[__drain_row] AS cluster_id,
-           __drain_r.templates[cluster_id] AS template
+           __drain_r.templates[__drain_r.cluster_ids[__drain_row]::BIGINT] AS template
     FROM __drain_src, __drain_model
 )
 SELECT * EXCLUDE (__drain_row),
@@ -100,7 +101,12 @@ fn register_parse(extension: &Extension) -> Result<()> {
                 .add_example("Parse a table", "FROM drain_parse('logs', 'message', order_by := 'ts')")
                 .add_category(CATEGORY),
         );
-    MacroFunctionBuilder::new("drain_parse", sig, MacroBody::Table(DRAIN_PARSE_SQL.to_string())).register(extension)
+    MacroFunctionBuilder::new(
+        "drain_parse",
+        sig,
+        MacroBody::Table(DRAIN_PARSE_SQL.to_string()),
+    )
+    .register(extension)
 }
 
 /// Register everything the extension provides.

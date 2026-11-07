@@ -29,12 +29,24 @@ fn named(p: FunctionParameter) -> FunctionParameter {
 ///
 /// Defaults are logpai/Drain3's: `sim_threshold 0.4`, `depth 4`, `max_children 100`,
 /// unlimited clusters, no extra delimiters, no masking, `<*>`, numeric tokens parametrized.
-pub fn add_params(sig: SignatureBuilder, link: &impl duckdb_neo::connection::FFILink) -> Result<SignatureBuilder> {
+pub fn add_params(
+    sig: SignatureBuilder,
+    link: &impl duckdb_neo::connection::FFILink,
+) -> Result<SignatureBuilder> {
     Ok(sig
-        .param(named(FunctionParameter::with_default("sim_threshold", 0.4_f64)))
+        .param(named(FunctionParameter::with_default(
+            "sim_threshold",
+            0.4_f64,
+        )))
         .param(named(FunctionParameter::with_default("depth", 4_i64)))
-        .param(named(FunctionParameter::with_default("max_children", 100_i64)))
-        .param(named(FunctionParameter::with_default("max_clusters", 0_i64)))
+        .param(named(FunctionParameter::with_default(
+            "max_children",
+            100_i64,
+        )))
+        .param(named(FunctionParameter::with_default(
+            "max_clusters",
+            0_i64,
+        )))
         .param(named(FunctionParameter::with_default(
             "extra_delimiters",
             List::<String>(Vec::new()),
@@ -46,7 +58,10 @@ pub fn add_params(sig: SignatureBuilder, link: &impl duckdb_neo::connection::FFI
             )
             .default_value(List::<MaskArg>(Vec::new())),
         ))
-        .param(named(FunctionParameter::with_default("param_str", "<*>".to_string())))
+        .param(named(FunctionParameter::with_default(
+            "param_str",
+            "<*>".to_string(),
+        )))
         .param(named(FunctionParameter::with_default(
             "parametrize_numeric_tokens",
             true,
@@ -59,9 +74,7 @@ fn arg(args: &BindArguments<'_>, name: &str) -> Result<Option<Value>> {
     };
     match args.value(index)? {
         Some(v) => Ok(Some(v)),
-        None => Err(Error::invalid_input(format!(
-            "{name} must be a constant"
-        ))),
+        None => Err(Error::invalid_input(format!("{name} must be a constant"))),
     }
 }
 
@@ -103,7 +116,9 @@ pub fn from_bind(args: &BindArguments<'_>) -> Result<drain::Config> {
         cfg.extra_delimiters = list
             .0
             .into_iter()
-            .map(|d| d.ok_or_else(|| Error::invalid_input("extra_delimiters must not contain NULL")))
+            .map(|d| {
+                d.ok_or_else(|| Error::invalid_input("extra_delimiters must not contain NULL"))
+            })
             .collect::<Result<_>>()?;
         if cfg.extra_delimiters.iter().any(String::is_empty) {
             return Err(Error::invalid_input("extra_delimiters must not contain ''"));

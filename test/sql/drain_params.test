@@ -1,0 +1,77 @@
+# name: test/sql/drain_params.test
+# description: drain_params
+# group: [drain3]
+
+require drain3
+
+query T
+SELECT drain_params('user <*> logged in from <IP>', 'user bob logged in from 10.0.0.1');
+----
+[bob, 10.0.0.1]
+
+# Masks inside a token, extra whitespace, no parameters.
+query T
+SELECT drain_params('took <NUM>ms id=<*>', 'took   12ms  id=abc');
+----
+[12, abc]
+
+query T
+SELECT drain_params('server started', 'server started');
+----
+[]
+
+# Message does not fit the template.
+query T
+SELECT drain_params('user <*> logged in', 'user bob logged out');
+----
+NULL
+
+query TT
+SELECT drain_params(NULL, 'x'), drain_params('x', NULL);
+----
+NULL	NULL
+
+# Regex metacharacters in templates are literal.
+query T
+SELECT drain_params('a.b (c) [<*>] $ ^ <*>?', 'a.b (c) [1] $ ^ z?');
+----
+[1, z]
+
+query T
+SELECT drain_params('a.b <*>', 'aXb 1');
+----
+NULL
+
+# Lower-case <tags> are literal text, not parameters.
+query T
+SELECT drain_params('<html> <*>', '<html> body');
+----
+[body]
+
+# Extra delimiters are treated as whitespace, as in training.
+query T
+SELECT drain_params('k <*> v <*>', 'k=1 v=2', extra_delimiters := ['=']);
+----
+[1, 2]
+
+statement error
+SELECT drain_params('k <*>', 'k=1', extra_delimiters := ['']);
+----
+extra_delimiters must not contain NULL or ''
+
+# Unicode and huge lines.
+query T
+SELECT drain_params('用户 <*> ✅', '用户 naïve ✅');
+----
+[naïve]
+
+query I
+SELECT length(drain_params('start <*> end', 'start ' || repeat('x', 1000000) || ' end')[1]);
+----
+1000000
+
+# Many distinct templates (regex cache eviction).
+query I
+SELECT count(*) FROM range(10000) t(i) WHERE drain_params('t' || i || ' <*>', 't' || i || ' v') = ['v'];
+----
+10000

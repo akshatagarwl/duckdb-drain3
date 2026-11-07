@@ -11,8 +11,10 @@ use duckdb_neo::{
     data_chunk::VectorCollection,
     error::Error,
     extension::Extension,
-    signature::{FunctionDocumentationBuilder, FunctionParameter, FunctionParameterKind, SignatureBuilder},
     scalar::{ScalarCallbacks, ScalarFunctionBuilder, ScalarInitCallbacks},
+    signature::{
+        FunctionDocumentationBuilder, FunctionParameter, FunctionParameterKind, SignatureBuilder,
+    },
     types::{BlobValue, List},
     vector::{Unknown, Vector},
 };
@@ -71,7 +73,11 @@ fn parse_search(s: &str) -> Result<Search> {
 pub struct SearchBind(Search);
 
 impl ScalarInitCallbacks for MatchFn {
-    fn init(&self, _bind_data: Option<&Self::BindData>, _context: &Context) -> Result<Self::InitData> {
+    fn init(
+        &self,
+        _bind_data: Option<&Self::BindData>,
+        _context: &Context,
+    ) -> Result<Self::InitData> {
         Ok(ModelCache::default())
     }
 }
@@ -81,7 +87,11 @@ impl duckdb_neo::scalar::ScalarBindCallbacks for MatchFn {
         let search = match arguments.index("search")? {
             None => Search::Never,
             Some(i) => match arguments.value(i)? {
-                None => return Err(Error::invalid_input("drain_match: search must be a constant")),
+                None => {
+                    return Err(Error::invalid_input(
+                        "drain_match: search must be a constant",
+                    ));
+                }
                 Some(v) => match v.get::<String>()? {
                     None => Search::Never,
                     Some(s) => parse_search(&s)?,
@@ -118,7 +128,6 @@ impl ScalarCallbacks for MatchFn {
         let mut total = 0usize;
         let mut templates: Vec<String> = Vec::new();
         let mut template_of: FxHashMap<u64, usize> = FxHashMap::default();
-        let mut model_gen = 0usize;
         let mut last_model: Option<(usize, usize)> = None;
         for row in 0..rows {
             let (Some(m), Some(line)) = (models.get(row)?, lines.get(row)?) else {
@@ -130,16 +139,19 @@ impl ScalarCallbacks for MatchFn {
             if last_model != Some(key) {
                 // A different model BLOB: cluster ids are not comparable across models.
                 last_model = Some(key);
-                model_gen += 1;
                 template_of.clear();
             }
-            let _ = model_gen;
             match drain.parse_with(line, search) {
                 None => results.push(None),
                 Some(p) => {
                     let id = p.cluster_id.get();
                     let t = *template_of.entry(id).or_insert_with(|| {
-                        templates.push(drain.cluster(p.cluster_id).map(|c| c.template().to_string()).unwrap_or_default());
+                        templates.push(
+                            drain
+                                .cluster(p.cluster_id)
+                                .map(|c| c.template().to_string())
+                                .unwrap_or_default(),
+                        );
                         templates.len() - 1
                     });
                     total += p.params.len();
@@ -187,7 +199,11 @@ pub struct ClusterRow {
 struct ClustersFn;
 
 impl ScalarInitCallbacks for ClustersFn {
-    fn init(&self, _bind_data: Option<&Self::BindData>, _context: &Context) -> Result<Self::InitData> {
+    fn init(
+        &self,
+        _bind_data: Option<&Self::BindData>,
+        _context: &Context,
+    ) -> Result<Self::InitData> {
         Ok(ModelCache::default())
     }
 }
@@ -248,8 +264,9 @@ impl ScalarCallbacks for ClustersFn {
 /// `<*>` and `<NAME>` tokens (NAME = upper-case letters, digits, `_`, the logpai mask
 /// convention) become lazy `(.+?)` groups, literal text is escaped, and runs of whitespace
 /// match any whitespace, like logpai/Drain3's `extract_parameters` (non-exact mode).
-pub fn template_regex(template: &str, delimiters: &[String]) -> Option<Regex> {
-    let mask = Regex::new(r"<\*>|<[A-Z0-9_]+>").expect("static regex");
+pub fn template_regex(template: &str) -> Option<Regex> {
+    static MASK: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let mask = MASK.get_or_init(|| Regex::new(r"<\*>|<[A-Z0-9_]+>").expect("static regex"));
     let mut re = String::from(r"(?s)^\s*");
     for (i, tok) in template.split_whitespace().enumerate() {
         if i > 0 {
@@ -264,7 +281,6 @@ pub fn template_regex(template: &str, delimiters: &[String]) -> Option<Regex> {
         re.push_str(&regex::escape(&tok[last..]));
     }
     re.push_str(r"\s*$");
-    let _ = delimiters;
     Regex::new(&re).ok()
 }
 
@@ -286,9 +302,9 @@ impl duckdb_neo::scalar::ScalarBindCallbacks for ParamsFn {
     fn bind(&self, _context: &Context, arguments: BindArguments<'_>) -> Result<Self::BindData> {
         let mut delimiters = Vec::new();
         if let Some(i) = arguments.index("extra_delimiters")? {
-            let v = arguments
-                .value(i)?
-                .ok_or_else(|| Error::invalid_input("drain_params: extra_delimiters must be a constant"))?;
+            let v = arguments.value(i)?.ok_or_else(|| {
+                Error::invalid_input("drain_params: extra_delimiters must be a constant")
+            })?;
             if let Some(list) = v.get::<List<String>>()? {
                 for d in list.0 {
                     match d {
@@ -307,7 +323,11 @@ impl duckdb_neo::scalar::ScalarBindCallbacks for ParamsFn {
 }
 
 impl ScalarInitCallbacks for ParamsFn {
-    fn init(&self, _bind_data: Option<&Self::BindData>, _context: &Context) -> Result<Self::InitData> {
+    fn init(
+        &self,
+        _bind_data: Option<&Self::BindData>,
+        _context: &Context,
+    ) -> Result<Self::InitData> {
         Ok(RegexCache::default())
     }
 }
@@ -343,7 +363,7 @@ impl ScalarCallbacks for ParamsFn {
             let re = cache
                 .map
                 .entry(t.to_string())
-                .or_insert_with(|| template_regex(t, delimiters));
+                .or_insert_with(|| template_regex(t));
             let Some(re) = re else {
                 results.push(None);
                 continue;
@@ -361,7 +381,11 @@ impl ScalarCallbacks for ParamsFn {
             match re.captures(subject) {
                 None => results.push(None),
                 Some(caps) => {
-                    let v: Vec<String> = caps.iter().skip(1).map(|m| m.map_or("", |m| m.as_str()).to_string()).collect();
+                    let v: Vec<String> = caps
+                        .iter()
+                        .skip(1)
+                        .map(|m| m.map_or("", |m| m.as_str()).to_string())
+                        .collect();
                     total += v.len();
                     results.push(Some(v));
                 }
@@ -373,7 +397,68 @@ impl ScalarCallbacks for ParamsFn {
         unsafe { out.set_child_size(out.child_offset() + total)? };
         let mut writer = out.writer()?;
         for (row, r) in results.into_iter().enumerate() {
-            writer.set(row, r.as_ref().map(|v| List(v.iter().map(|s| Some(s.as_str())).collect())))?;
+            writer.set(
+                row,
+                r.as_ref()
+                    .map(|v| List(v.iter().map(|s| Some(s.as_str())).collect())),
+            )?;
+        }
+        Ok(())
+    }
+}
+
+// --------------------------------------------------------------- drain_render
+
+/// Fill a template's `<*>` / `<NAME>` slots with `params`, in order. Slots without a
+/// value (too few params, or a NULL element) are left as they are; extra params are ignored.
+pub fn render(template: &str, params: &[Option<&str>]) -> String {
+    static MASK: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let mask = MASK.get_or_init(|| Regex::new(r"<\*>|<[A-Z0-9_]+>").expect("static regex"));
+    let mut out = String::with_capacity(template.len() + 16 * params.len());
+    let mut last = 0;
+    for (i, m) in mask.find_iter(template).enumerate() {
+        out.push_str(&template[last..m.start()]);
+        match params.get(i).copied().flatten() {
+            Some(v) => out.push_str(v),
+            None => out.push_str(m.as_str()),
+        }
+        last = m.end();
+    }
+    out.push_str(&template[last..]);
+    out
+}
+
+struct RenderFn;
+
+impl ScalarCallbacks for RenderFn {
+    type BindData = ();
+    type InitData = ();
+
+    fn exec(
+        &self,
+        _bind_data: Option<&Self::BindData>,
+        _init_data: Option<&mut Self::InitData>,
+        _context: &Context,
+        vectors: &mut VectorCollection,
+        output: Vector<'_, Unknown>,
+    ) -> Result<()> {
+        let rows = vectors.row_count()?;
+        let templates = vectors.get_vector_at::<String>(0)?.reader()?;
+        let params = vectors.get_vector_at::<List<String>>(1)?.reader()?;
+        let mut out = output.cast::<String>()?;
+        out.set_size(rows)?;
+        let mut writer = out.writer()?;
+        let mut buf: Vec<Option<&str>> = Vec::new();
+        for row in 0..rows {
+            let Some(t) = templates.get(row)? else {
+                writer.set(row, None)?;
+                continue;
+            };
+            buf.clear();
+            if let Some(list) = params.get(row)? {
+                buf.extend(list.iter());
+            }
+            writer.set(row, Some(render(t, &buf).as_str()))?;
         }
         Ok(())
     }
@@ -385,7 +470,10 @@ pub fn register(extension: &Extension) -> Result<()> {
         SignatureBuilder::new()
             .param(FunctionParameter::new::<BlobValue>("model"))
             .param(FunctionParameter::new::<String>("message"))
-            .param(FunctionParameter::with_default("search", "never".to_string()).kind(FunctionParameterKind::Named))
+            .param(
+                FunctionParameter::with_default("search", "never".to_string())
+                    .kind(FunctionParameterKind::Named),
+            )
             .return_type(Match::logical_type(extension)?)
             .documentation(
                 FunctionDocumentationBuilder::new()
@@ -452,5 +540,27 @@ pub fn register(extension: &Extension) -> Result<()> {
     )
     .with_bind()
     .with_init()
+    .register(extension)?;
+
+    ScalarFunctionBuilder::new(
+        "drain_render",
+        SignatureBuilder::new()
+            .param(FunctionParameter::new::<String>("template"))
+            .param(FunctionParameter::new::<List<String>>("params"))
+            .return_type(String::logical_type(extension)?)
+            .documentation(
+                FunctionDocumentationBuilder::new()
+                    .description(
+                        "Fill the <*> / <MASK> slots of a template with params, in order: the inverse of \
+                         drain_params. Whitespace comes out normalized (single spaces), as in templates.",
+                    )
+                    .add_example(
+                        "Rebuild a line",
+                        "SELECT drain_render('user <*> logged in from <IP>', ['bob', '10.0.0.1'])",
+                    )
+                    .add_category(CATEGORY),
+            ),
+        RenderFn,
+    )
     .register(extension)
 }
