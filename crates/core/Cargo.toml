@@ -1,0 +1,15 @@
+[package]
+name = "drain3_duckdb"
+description = "DuckDB functions for Drain log template mining (core of the drain3 DuckDB extension)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+duckdb-neo.workspace = true
+drain = { package = "drain3", version = "0.4.0", features = ["serde"] }
+postcard = { version = "1", default-features = false, features = ["use-std"] }
+regex = "1"
+rustc-hash = "2"

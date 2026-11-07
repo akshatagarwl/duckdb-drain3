@@ -1,0 +1,15 @@
+[package]
+name = "duckdb_drain3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "drain3"
+crate-type = ["cdylib"]
+
+[dependencies]
+duckdb-neo.workspace = true
+drain3_duckdb.workspace = true

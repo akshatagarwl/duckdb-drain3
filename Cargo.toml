@@ -1,0 +1,21 @@
+[workspace]
+members = ["crates/core", "crates/native", "crates/wasm"]
+default-members = ["crates/native"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/akshatagarwl/duckdb-drain3"
+authors = ["Akshat Agarwal <hey@akshat.dev>"]
+
+[workspace.dependencies]
+duckdb-neo = { version = "=0.20000.1", features = ["build-extension"] }
+drain3 = { version = "0.4.0", features = ["serde"] }
+drain3_duckdb = { path = "crates/core" }
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
