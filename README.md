@@ -163,7 +163,7 @@ templates as logpai/Drain3.
 Command: `DRAIN3_BENCH=<drain3>/bench/compare configure/venv/bin/python bench/accuracy.py`. See
 [`bench/`](bench/).
 
-THROUGHPUT_TABLE
+<!-- throughput -->
 
 ## Building
 
