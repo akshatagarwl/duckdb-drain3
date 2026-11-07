@@ -31,14 +31,14 @@ WITH before AS (
   SELECT drain_train(message ORDER BY ts) AS model
   FROM logs WHERE ts < TIMESTAMP '2026-11-01 12:00'
 )
-SELECT drain_params('cache shard <*> rebuilt in <*> ms', message)[1] AS shard, count(*) AS n
+SELECT message, count(*) AS n
 FROM logs, before
 WHERE ts >= TIMESTAMP '2026-11-01 12:00'
   AND drain_match(before.model, message) IS NULL
-GROUP BY ALL ORDER BY shard;
+GROUP BY ALL ORDER BY n DESC, message;
 ----
-3	1
-7	1
+cache shard 3 rebuilt in 120 ms	1
+cache shard 7 rebuilt in 98 ms	1
 
 # 3. Filter on parameters
 query TT
@@ -66,6 +66,14 @@ JOIN logs USING (ts)
 WHERE drain_render(t.template, l.params) = logs.message;
 ----
 7
+
+query TT
+SELECT ts, drain_render(t.template, l.params) AS message
+FROM '__TEST_DIR__/lines.parquet' l JOIN '__TEST_DIR__/templates.parquet' t USING (cluster_id)
+ORDER BY ts LIMIT 2;
+----
+2026-11-01 10:00:00	user alice logged in from 10.0.0.1 after 3 attempts
+2026-11-01 10:01:00	user bob logged in from 10.0.0.7 after 1 attempts
 
 # 5. Train once, reuse the model
 statement ok
