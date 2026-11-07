@@ -89,8 +89,10 @@ WHERE template = 'user <*> logged in from <*> after <*> attempts'
   AND params[3]::INT >= 3;
 ```
 
-**4. Parquet archive.** Store a cluster id and the parameters for each line, and keep the templates
-once. `drain_render` rebuilds the lines.
+**4. Parquet archive by template.** Store a cluster id and the parameters for each line, and keep
+the templates once. Then you can filter by template or parameter without regular expressions.
+`drain_render` rebuilds the lines. On BGL this layout is about the same size as the raw lines (see
+[Benchmarks](#benchmarks)).
 
 ```sql
 COPY (SELECT ts, service, cluster_id, params FROM drain_parse('logs', 'message', order_by := 'ts'))
@@ -163,7 +165,37 @@ templates as logpai/Drain3.
 Command: `DRAIN3_BENCH=<drain3>/bench/compare configure/venv/bin/python bench/accuracy.py`. See
 [`bench/`](bench/).
 
-<!-- throughput -->
+**Throughput on BGL**: 4,747,963 raw lines, Drain3 defaults (depth 4, `sim_threshold` 0.4, no
+masking). Lines were loaded into memory before timing. DuckDB numbers are the best of 3 runs;
+logpai/Drain3 got 1 run.
+
+| what | drain3 extension | logpai/Drain3 0.9.11 (Python) |
+|---|--:|--:|
+| train, in order (`drain_train(message ORDER BY ln)` / `add_log_message` loop) | 2.97 s, 1.60 M lines/s | 143.5 s, 33 K lines/s |
+| match every line, 10 threads (`drain_match`) | 0.81 s, 5.86 M lines/s | n/a (single-threaded) |
+| match every line, 1 thread | 3.86 s, 1.23 M lines/s | 323.5 s, 14.7 K lines/s |
+| `drain_parse`: every row with cluster, template and params | 10.9 s, 437 K lines/s | |
+
+Both found 842 clusters and matched every line. `drain_parse` put every one of the 4,747,963 lines
+in the same cluster as the drain3 crate.
+
+Commands: `configure/venv/bin/python bench/throughput.py 3` and
+`.venv/bin/python impls/python/run.py bench data/BGL.log 4 0.4`, run from drain3's `bench/compare`.
+Machine: Apple M4 (10 cores), 24 GiB, macOS 27.0.1, DuckDB v2.0.0, Python 3.12.12. Other work was
+running on the machine (1-minute load average 1.5 to 4), so treat these as rough numbers.
+
+**Archive size**, from [`bench/archive.sql`](bench/archive.sql). The data is BGL, written as ZSTD
+Parquet.
+
+| layout | size |
+|---|--:|
+| raw lines, one `VARCHAR` column | 70.9 MB |
+| `cluster_id` + `params` per line, plus an 842-row template table | 68.5 MB |
+| for reference: `gzip -6` of the text file | 62.9 MB |
+
+On BGL the template layout saves only about 3%, because most of each line is in its parameters
+(timestamps, node names). The benefit is that you can filter by template or parameter without
+regular expressions. `drain_render` rebuilt all 4,747,963 lines, identical up to whitespace.
 
 ## Building
 

@@ -1,0 +1,16 @@
+HDFS         logpai/Drain3 0.9.11: GA=0.998 PA=0.625  drain3 DuckDB extension: GA=0.998 PA=0.625  identical
+Hadoop       logpai/Drain3 0.9.11: GA=0.948 PA=0.513  drain3 DuckDB extension: GA=0.948 PA=0.513  identical
+Spark        logpai/Drain3 0.9.11: GA=0.920 PA=0.382  drain3 DuckDB extension: GA=0.920 PA=0.382  identical
+Zookeeper    logpai/Drain3 0.9.11: GA=0.967 PA=0.497  drain3 DuckDB extension: GA=0.967 PA=0.497  identical
+BGL          logpai/Drain3 0.9.11: GA=0.963 PA=0.344  drain3 DuckDB extension: GA=0.963 PA=0.344  identical
+HPC          logpai/Drain3 0.9.11: GA=0.887 PA=0.635  drain3 DuckDB extension: GA=0.887 PA=0.635  identical
+Thunderbird  logpai/Drain3 0.9.11: GA=0.955 PA=0.046  drain3 DuckDB extension: GA=0.955 PA=0.046  identical
+Windows      logpai/Drain3 0.9.11: GA=0.997 PA=0.462  drain3 DuckDB extension: GA=0.997 PA=0.462  identical
+Linux        logpai/Drain3 0.9.11: GA=0.876 PA=0.172  drain3 DuckDB extension: GA=0.876 PA=0.172  identical
+Android      logpai/Drain3 0.9.11: GA=0.857 PA=0.530  drain3 DuckDB extension: GA=0.857 PA=0.530  identical
+HealthApp    logpai/Drain3 0.9.11: GA=0.780 PA=0.231  drain3 DuckDB extension: GA=0.780 PA=0.231  identical
+Apache       logpai/Drain3 0.9.11: GA=1.000 PA=0.694  drain3 DuckDB extension: GA=1.000 PA=0.694  identical
+Proxifier    logpai/Drain3 0.9.11: GA=0.526 PA=0.503  drain3 DuckDB extension: GA=0.526 PA=0.503  identical
+OpenSSH      logpai/Drain3 0.9.11: GA=0.789 PA=0.508  drain3 DuckDB extension: GA=0.789 PA=0.508  identical
+OpenStack    logpai/Drain3 0.9.11: GA=0.733 PA=0.018  drain3 DuckDB extension: GA=0.733 PA=0.018  identical
+Mac          logpai/Drain3 0.9.11: GA=0.786 PA=0.217  drain3 DuckDB extension: GA=0.786 PA=0.217  identical

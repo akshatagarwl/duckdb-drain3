@@ -1,0 +1,16 @@
+{
+ "lines": 4747963,
+ "threads": 10,
+ "drain_train_s": 2.965051500010304,
+ "clusters": 842,
+ "drain_match_s": 0.8095480418996885,
+ "matched": 4747963,
+ "drain_match_1thread_s": 3.862018792075105,
+ "drain_parse_s": 10.868265750003047,
+ "parity_lines_equal": 4747963,
+ "parity_lines_total": 4747963,
+ "drain_train_lines_per_s": 1601309,
+ "drain_match_lines_per_s": 5864955,
+ "drain_match_1thread_lines_per_s": 1229399,
+ "drain_parse_lines_per_s": 436865
+}
